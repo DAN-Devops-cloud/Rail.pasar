@@ -1,0 +1,86 @@
+# Multi-stage Dockerfile for PasarGuard Panel v5.1.0
+# Build dashboard with Bun, then Python backend
+
+# ============================================================================
+# Stage 1: Dashboard builder (Bun + Vite)
+# ============================================================================
+FROM oven/bun:1 AS dashboard-builder
+
+WORKDIR /build/dashboard
+COPY dashboard/package.json dashboard/bun.lock* ./
+
+RUN bun install --frozen-lockfile
+
+COPY dashboard/ ./
+
+RUN bun run build
+
+# ============================================================================
+# Stage 2: Python backend runtime
+# ============================================================================
+FROM python:3.14-slim
+
+WORKDIR /code
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python project files
+COPY pyproject.toml pyproject.lock* ./
+COPY app/ ./app/
+COPY config.py main.py start.sh healthcheck.sh ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -e . && \
+    chmod +x start.sh healthcheck.sh
+
+# Copy built dashboard from builder stage
+COPY --from=dashboard-builder /build/dashboard/dist /code/dashboard/dist
+
+# Create entrypoint wrapper that generates self-signed cert if needed
+RUN mkdir -p /code/certs && cat > /code/entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Ensure certs directory exists
+mkdir -p /code/certs
+
+# Generate self-signed cert if not present
+if [ ! -f /code/certs/cert.pem ] || [ ! -f /code/certs/key.pem ]; then
+  echo "[*] Generating self-signed certificate..."
+  openssl req -x509 -newkey rsa:4096 -keyout /code/certs/key.pem \
+    -out /code/certs/cert.pem -days 365 -nodes \
+    -subj "/CN=localhost" 2>/dev/null
+  echo "[✓] Certificate generated"
+fi
+
+# Export cert paths for the app
+export SSL_CERT_FILE=/code/certs/cert.pem
+export SSL_KEY_FILE=/code/certs/key.pem
+
+# Run the application
+exec /code/start.sh
+EOF
+
+RUN chmod +x /code/entrypoint.sh
+
+# Expose HTTPS port (Railway will map this)
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD /code/healthcheck.sh
+
+# Default environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBUG=false \
+    SUDO_USERNAME=admin \
+    SUDO_PASSWORD=admin12345 \
+    WORKERS=4 \
+    SSL_CA_TYPE=self-signed
+
+# Run with custom entrypoint that handles certs
+ENTRYPOINT ["/code/entrypoint.sh"]

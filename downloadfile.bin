@@ -1,0 +1,48 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Development
+node_modules
+.env.local
+.env.*.local
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# OS
+.DS_Store
+.env.example
+test/
+tests/
+.editorconfig
+
+# Build artifacts (we rebuild in multi-stage)
+dist/
+build/
+.next/

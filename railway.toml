@@ -1,0 +1,23 @@
+[build]
+builder = "dockerfile"
+dockerfile = "./Dockerfile"
+
+[deploy]
+startCommand = "/code/start.sh"
+restartPolicy = "always"
+
+[[services]]
+name = "pasarguard-panel"
+image = "pasarguard-panel"
+port = 8000
+
+[env]
+PYTHONUNBUFFERED = "1"
+DEBUG = "false"
+WORKERS = "4"
+SUDO_USERNAME = "admin"
+SUDO_PASSWORD = "admin12345"
+SSL_CA_TYPE = "self-signed"
+
+[volumes]
+"/var/lib/pasarguard" = "pasarguard-data"
